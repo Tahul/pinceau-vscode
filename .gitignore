@@ -1,0 +1,10 @@
+node_modules
+.vscode-test
+*.vsix
+*.tsbuildinfo
+.turbo
+dist
+out
+.DS_Store
+
+./packages/vscode-css-variables/README.md

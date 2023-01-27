@@ -1,0 +1,34 @@
+{
+  "version": "0.2.0",
+  // List of configurations. Add new configurations or edit existing ones.
+  "configurations": [
+    {
+      "type": "extensionHost",
+      "request": "launch",
+      "name": "Launch Client",
+      "runtimeExecutable": "${execPath}",
+      "args": ["--extensionDevelopmentPath=${workspaceRoot}/packages/vscode-css-variables"],
+      "sourceMaps": true,
+      "outFiles": ["${workspaceRoot}/packages/vscode-css-variables/dist/**/*.js"],
+      "preLaunchTask": "npm: build"
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach to Server 6011",
+      "address": "localhost",
+      "port": 6011,
+      "sourceMaps": true,
+      "outFiles": ["${workspaceRoot}/packages/vscode-css-variables/dist/**/*.js"]
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach to Server 6012",
+      "address": "localhost",
+      "port": 6012,
+      "sourceMaps": true,
+      "outFiles": ["${workspaceRoot}/packages/vscode-css-variables/dist/**/*.js"]
+    }
+  ]
+}

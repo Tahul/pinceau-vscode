@@ -1,0 +1,21 @@
+{
+	"name": "root",
+	"version": "0.0.0",
+	"private": true,
+	"workspaces": [
+		"packages/*"
+	],
+	"scripts": {
+		"build": "turbo run build",
+		"test": "turbo run test",
+		"lint": "turbo run lint",
+		"dev": "turbo run dev",
+		"package": "turbo run package",
+		"deploy": "turbo run deploy",
+		"release": "cp README.md packages/vscode-css-variables/README.md && npm run build && changeset publish"
+	},
+	"devDependencies": {
+		"@changesets/cli": "^2.24.3",
+		"turbo": "^1.4.3"
+	}
+}
