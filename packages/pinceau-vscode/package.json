@@ -1,11 +1,11 @@
 {
 	"name": "pinceau-vscode",
 	"version": "0.0.1",
-	"displayName": "Pinceau VSCode",
+	"displayName": "Pinceau",
 	"description": "IntelliSense integration for Pinceau features",
-	"publisher": "tahul",
+	"publisher": "yaelguilloux",
 	"engines": {
-		"vscode": "^1.63.0"
+		"vscode": "^1.74.0"
 	},
 	"keywords": [
 		"pinceau",
@@ -109,8 +109,8 @@
 		"lint": "eslint ./src --ext .ts,.tsx --fix",
 		"pretest": "tsc -p ./ && rm -f .vscode-test/user-",
 		"test": "node ./out/test/runTest.js",
-		"deploy": "vsce publish",
-		"package": "vsce package --pre-release"
+		"deploy": "vsce publish --no-dependencies",
+		"package": "vsce package --pre-release --no-dependencies"
 	},
 	"devDependencies": {
 		"@nuxtjs/eslint-config-typescript": "^12.0.0",
@@ -120,20 +120,15 @@
 		"@typescript-eslint/eslint-plugin": "^5.49.0",
 		"@typescript-eslint/parser": "^5.49.0",
 		"@vscode/test-electron": "^2.2.2",
-		"eslint": "^8.32.0",
+		"eslint": "^8.33.0",
 		"eslint-config-airbnb-typescript": "^17.0.0",
 		"glob": "^8.1.0",
 		"mocha": "^10.2.0",
 		"pinceau-language-server": "*",
+		"release-it": "^15.6.0",
 		"tsup": "^6.5.0",
 		"typescript": "^4.9.4",
-		"vsce": "^2.10.2",
+		"@vscode/vsce": "^2.17.0",
 		"vscode-languageclient": "^8.0.2"
-	},
-	"__metadata": {
-		"id": "3f96fda8-094b-4817-97fb-a7eab7a8f5e0",
-		"publisherDisplayName": "Vu Nguyen",
-		"publisherId": "411219bd-68b8-4df2-9a3b-1ac214fcfd05",
-		"isPreReleaseVersion": false
 	}
 }
