@@ -148,10 +148,7 @@ function getDocumentSettings (): Thenable<PinceauVSCodeSettings> {
 }
 
 // Only keep settings for open documents
-documents.onDidClose((e) => {
-  connection.console.log('Closed: ' + e.document.uri)
-  documentSettings.delete(e.document.uri)
-})
+documents.onDidClose(e => documentSettings.delete(e.document.uri))
 
 connection.onDidChangeWatchedFiles(async (_change) => {
   const settings = await getDocumentSettings()
@@ -334,25 +331,6 @@ connection.onDefinition((params) => {
 
   const inlineRange = findStringRange(currentLine.text, currentToken.token, params.position, delimiter)
   if (token?.definition && inlineRange) {
-    console.log(
-      JSON.stringify([
-        {
-          targetUri: token.definition.uri,
-          targetRange: {
-            start: { character: params.position.line - currentToken.token.length, line: params.position.line },
-            end: { character: params.position.line + currentToken.token.length, line: params.position.line }
-          },
-          targetSelectionRange: {
-            start: { character: (token.definition.range.start as any).column, line: token.definition.range.start.line - 1 },
-            end: { character: (token.definition.range.end as any).column, line: token.definition.range.end.line - 1 }
-          },
-          originSelectionRange: {
-            start: { line: params.position.line, character: Math.max(0, inlineRange.start) },
-            end: { line: params.position.line, character: inlineRange.end }
-          }
-        }
-      ], null, 2))
-
     return [
       {
         uri: doc.uri,
