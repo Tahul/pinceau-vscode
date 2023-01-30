@@ -30,12 +30,36 @@
 		"configuration": {
 			"title": "Pinceau",
 			"properties": {
-				"pinceau.lookupFiles": {
+				"pinceau.tokensOutput": {
 					"type": "array",
 					"markdownDescription": "Configure glob patterns for including files and folders. Read more about glob patterns [here](https://code.visualstudio.com/docs/editor/codebasics#_advanced-search-options).",
 					"default": [
-						"**/*/.nuxt/pinceau/theme/index.css",
-						"**/*/node_modules/.vite/pinceau/theme/index.css"
+						"**/*/.nuxt/pinceau/index.ts",
+    				"**/*/node_modules/.vite/pinceau/index.ts"
+					],
+					"scope": 3,
+					"additionalProperties": {
+						"anyOf": [
+							{
+								"type": "array",
+								"properties": {
+									"when": {
+										"type": "string",
+										"pattern": "\\w*\\$\\(basename\\)\\w*",
+										"default": "$(basename).ext",
+										"description": "Additional check on the siblings of a matching file. Use $(basename) as variable for the matching file name."
+									}
+								}
+							}
+						]
+					}
+				},
+				"pinceau.definitionsOutput": {
+					"type": "array",
+					"markdownDescription": "Configure glob patterns for including files and folders. Read more about glob patterns [here](https://code.visualstudio.com/docs/editor/codebasics#_advanced-search-options).",
+					"default": [
+						"**/*/.nuxt/pinceau/definitions.ts",
+    				"**/*/node_modules/.vite/pinceau/definitions.ts"
 					],
 					"scope": 3,
 					"additionalProperties": {
