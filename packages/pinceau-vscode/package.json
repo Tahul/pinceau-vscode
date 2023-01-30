@@ -20,7 +20,7 @@
 	"activationEvents": [
 		"onStartupFinished"
 	],
-	"icon": "icon/css.png",
+	"icon": "icon/pinceau.png",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/Tahul/pinceau-vscode.git"
