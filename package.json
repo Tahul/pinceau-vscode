@@ -3,8 +3,9 @@
 	"version": "0.0.0",
 	"private": true,
 	"workspaces": [
-		"packages/*"
-	],
+    "packages/pinceau-language-server",
+    "packages/pinceau-vscode"
+  ],
 	"scripts": {
 		"build": "turbo run build",
 		"test": "turbo run test",
@@ -12,10 +13,10 @@
 		"dev": "turbo run dev",
 		"package": "turbo run package",
 		"deploy": "turbo run deploy",
-		"release": "cp README.md packages/vscode-css-variables/README.md && npm run build && changeset publish"
+		"release": "cp README.md packages/pinceau-vscode/README.md && npm run build && changeset publish"
 	},
 	"devDependencies": {
-		"@changesets/cli": "^2.24.3",
-		"turbo": "^1.4.3"
+		"@changesets/cli": "^2.26.0",
+		"turbo": "^1.7.0"
 	}
 }

@@ -1,5 +1,7 @@
 # Pinceau VSCode
 
+![Pinceau Banner](cover.png)
+
 IntelliSense integration for [Pinceau](https://github.com/Tahul/pinceau) features.
 
 ### Credits

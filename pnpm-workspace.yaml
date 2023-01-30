@@ -1,0 +1,3 @@
+packages:
+  - packages/pinceau-language-server
+  - packages/pinceau-vscode
