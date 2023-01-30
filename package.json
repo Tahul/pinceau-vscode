@@ -3,20 +3,17 @@
 	"version": "0.0.0",
 	"private": true,
 	"workspaces": [
-    "packages/pinceau-language-server",
-    "packages/pinceau-vscode"
-  ],
+		"packages/pinceau-language-server",
+		"packages/pinceau-vscode"
+	],
 	"scripts": {
 		"build": "turbo run build",
 		"test": "turbo run test",
 		"lint": "turbo run lint",
 		"dev": "turbo run dev",
-		"package": "turbo run package",
-		"deploy": "turbo run deploy",
-		"release": "cp README.md packages/pinceau-vscode/README.md && npm run build && changeset publish"
+		"package": "turbo run package"
 	},
 	"devDependencies": {
-		"@changesets/cli": "^2.26.0",
 		"turbo": "^1.7.0"
 	}
 }

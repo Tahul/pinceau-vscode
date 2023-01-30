@@ -16,11 +16,6 @@
       "outputs": []
     },
     "package": {
-      "dependsOn": ["build", "test", "lint"],
-      "outputs": ["*.vsix"]
-    },
-    "deploy": {
-      "dependsOn": ["build", "test", "lint"],
       "outputs": []
     }
   }
