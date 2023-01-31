@@ -11,7 +11,8 @@ import {
   TextDocumentSyncKind,
   InitializeResult,
   ColorInformation,
-  FileChangeType
+  FileChangeType,
+  DiagnosticSeverity
 } from 'vscode-languageserver/node'
 import { Position, TextDocument } from 'vscode-languageserver-textdocument'
 import { parse as parseSfc } from '@vue/compiler-sfc'
@@ -36,6 +37,7 @@ let hasConfigurationCapability = false
 let hasWorkspaceFolderCapability = false
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let hasDiagnosticRelatedInformationCapability = false
+let rootPath: string
 
 const pinceauTokensManager = new PinceauTokensManager()
 
@@ -74,6 +76,8 @@ connection.onInitialize((params: InitializeParams) => {
     const validFolders = workspaceFolders
       ?.map(folder => uriToPath(folder.uri) || '')
       .filter(path => !!path)
+
+    rootPath = validFolders?.[0]
 
     const settings = await getDocumentSettings()
 
@@ -179,43 +183,43 @@ connection.onCompletion(
 
     const position = doc.positionAt(offset)
     const currentLine = getCurrentLine(doc, position)
-    const isBetween = (x, a, b) => (x >= a && x <= b)
+    const isBetween = (x: number, a: number, b: number) => (x >= a && x <= b)
 
     // Resolve Vue <style> contexts
     const styleTsBlocks: [number, number][] = []
     if (ext === 'vue') {
       const parsedVueComponent = parseSfc(doc.getText())
-      parsedVueComponent.descriptor.styles.forEach(
-        (styleTag) => {
-          styleTsBlocks.push([styleTag.loc.start.offset, styleTag.loc.end.offset])
-        }
-      )
+      parsedVueComponent.descriptor.styles.forEach(styleTag => styleTsBlocks.push([styleTag.loc.start.offset, styleTag.loc.end.offset]))
     }
 
     const isTokenFunctionCall = currentLine ? isInFunctionExpression(currentLine.text, position) : false
     const isOffsetOnStyleTsTag = styleTsBlocks.some(([start, end]) => isBetween(offset, start, end))
     const isInStringExpression = currentLine ? isInString(currentLine.text, position) : false
 
+    const isResponsiveToken = token => !!((token?.value as any)?.initial)
+    const stringifiedValue = token => isResponsiveToken(token)
+      ? Object.entries(token.value).map(([key, value]) => `@${key}: ${value}`).join('\n')
+      : token.value?.toString() || token?.value
+
     // Create completion symbols
     if (isTokenFunctionCall || (isOffsetOnStyleTsTag && isInStringExpression)) {
       pinceauTokensManager.getAll().forEach((token) => {
+        if (!token?.name || !token?.value) { return }
+
         const insertText = isTokenFunctionCall ? token?.name : `{${token.name}}`
-        const isResponsiveToken = token => !!((token?.value as any)?.initial)
-        const stringifiedValue = token => isResponsiveToken(token)
-          ? Object.entries(token.value).map(([key, value]) => `⚙️ ${key}: ${value}`).join('\n')
-          : token.value?.toString() || token?.value
 
         const originalString = stringifiedValue({ value: token?.original })
+        const configValue = originalString ? `⚙️ Config value:\n${originalString}` : undefined
         const stringValue = stringifiedValue(token)
+        const sourcePath = token?.definition?.uri.replace(rootPath || '', '')
+        const source = sourcePath ? `📎 Source:\n${sourcePath}` : ''
 
         const completion: CompletionItem = {
           label: token?.name,
           detail: stringValue?.split?.('\n')?.[0],
-          documentation: originalString ? `Config value:\n${originalString}` : undefined,
+          documentation: `${configValue}${sourcePath ? '\n\n' + source : ''}`,
           insertText,
-          kind: token?.color
-            ? CompletionItemKind.Color
-            : CompletionItemKind.Constant,
+          kind: CompletionItemKind.Color,
           sortText: token?.name
         }
 
@@ -229,13 +233,10 @@ connection.onCompletion(
   }
 )
 
-// This handler resolves additional information for the item selected in
-// the completion list.
-connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
-  return item
-})
+// This handler resolves additional information for the item selected in the completion list.
+connection.onCompletionResolve((item: CompletionItem): CompletionItem => item)
 
-connection.onDocumentColor((params): ColorInformation[] => {
+connection.onDocumentColor(async (params): Promise<ColorInformation[]> => {
   const document = documents.get(params.textDocument.uri)
   if (!document) {
     return []
@@ -245,17 +246,29 @@ connection.onDocumentColor((params): ColorInformation[] => {
 
   const text = document.getText()
   const referencesRegex = /{([a-zA-Z0-9.]+)}/g
-  const dtRegex = /\$dt\(['|`|"]([a-zA-Z0-9.]+)['|`|"]\)/g
+  const dtRegex = /\$dt\(['|`|"]([a-zA-Z0-9.]+)['|`|"](?:,\s*(['|`|"]([a-zA-Z0-9.]+)['|`|"]))?\)?/g
   const dtMatches = findAll(dtRegex, text)
   const tokenMatches = findAll(referencesRegex, text)
 
   const globalStart: Position = { line: 0, character: 0 }
 
-  ;[...dtMatches, ...tokenMatches].forEach((match) => {
-    const start = indexToPosition(text, match.index)
-    const end = indexToPosition(text, match.index + match[1].length)
+  for (const match of [...dtMatches, ...tokenMatches]) {
+    const isDt = match[0].startsWith('$dt')
+    const start = indexToPosition(text, isDt ? match.index : match.index + 1)
+    const end = indexToPosition(text, isDt ? match.index + match[1].length : match.index + match[1].length + 1)
 
     const token = pinceauTokensManager.getAll().get(match[1])
+
+    if (pinceauTokensManager.initialized && !token && text.charAt(match.index - 1) !== '$') {
+      await connection.sendDiagnostics({
+        uri: params.textDocument.uri,
+        diagnostics: [{
+          message: `🖌️ Theme token not found: \`${match[1]}\``,
+          range: { start, end },
+          severity: DiagnosticSeverity.Warning
+        }]
+      })
+    }
 
     if (token?.color) {
       const range = {
@@ -276,7 +289,7 @@ connection.onDocumentColor((params): ColorInformation[] => {
         range
       })
     }
-  })
+  }
 
   return colors
 })
@@ -284,17 +297,15 @@ connection.onDocumentColor((params): ColorInformation[] => {
 connection.onHover((params) => {
   const doc = documents.get(params.textDocument.uri)
   if (!doc) { return }
+
   let token
   token = getHoveredToken(doc, params.position)
   if (!token) { token = getHoveredTokenFunction(doc, params.position) }
   if (!token) { return }
+
   const cssVariable = pinceauTokensManager.getAll().get(token.token)
 
-  if (cssVariable) {
-    return {
-      contents: `${(cssVariable.value as any)?.initial || cssVariable.value}`
-    }
-  }
+  if (cssVariable) { return { contents: `⚙️ ${(cssVariable.value as any)?.initial || cssVariable.value}` } }
 })
 
 connection.onColorPresentation((params) => {
@@ -352,9 +363,6 @@ connection.onDefinition((params) => {
   }
 })
 
-// Make the text document manager listen on the connection
-// for open, change and close text document events
 documents.listen(connection)
 
-// Listen on the connection
 connection.listen()

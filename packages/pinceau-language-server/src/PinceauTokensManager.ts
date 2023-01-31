@@ -35,6 +35,7 @@ async function globRequire (folderPath: string, globPaths: string[], cb: (filePa
 }
 
 export default class PinceauTokensManager {
+  public initialized = false
   private cacheManager = new CacheManager<DesignToken & { definition: Location; color?: Color }>()
 
   public async syncTokens (folders: string[], settings: PinceauVSCodeSettings) {
@@ -67,6 +68,8 @@ export default class PinceauTokensManager {
         console.log('Could not load definitions file:', folderPath)
       }
     }
+
+    if (!this.initialized) { this.initialized = true }
   }
 
   public pushDefinitions ({
