@@ -255,7 +255,7 @@ connection.onDocumentColor(async (params): Promise<ColorInformation[]> => {
   for (const match of [...dtMatches, ...tokenMatches]) {
     const isDt = match[0].startsWith('$dt')
     const start = indexToPosition(text, isDt ? match.index : match.index + 1)
-    const end = indexToPosition(text, isDt ? match.index + match[1].length : match.index + match[1].length + 1)
+    const end = indexToPosition(text, isDt ? match.index + match.length : match.index + match[1].length + 1)
 
     const token = pinceauTokensManager.getAll().get(match[1])
 
