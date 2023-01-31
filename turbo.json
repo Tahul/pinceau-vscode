@@ -17,6 +17,9 @@
     },
     "package": {
       "outputs": []
+    },
+    "deploy": {
+      "outputs": []
     }
   }
 }
