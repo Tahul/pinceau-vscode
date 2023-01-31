@@ -279,7 +279,7 @@ connection.onDocumentColor(async (params): Promise<ColorInformation[]> => {
         diagnostics: [{
           message: `🖌️ Theme token not found: \`${match[1]}\``,
           range: { start, end },
-          severity: DiagnosticSeverity.Warning
+          severity: DiagnosticSeverity.Hint
         }]
       })
     }
