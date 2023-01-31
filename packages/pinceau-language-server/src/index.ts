@@ -1,4 +1,4 @@
-import path from 'node:path'
+import path, { dirname } from 'node:path'
 import {
   createConnection,
   TextDocuments,
@@ -18,13 +18,13 @@ import { Position, TextDocument } from 'vscode-languageserver-textdocument'
 import { parse as parseSfc } from '@vue/compiler-sfc'
 import { uriToPath } from './utils/protocol'
 import { findAll } from './utils/findAll'
-import { indexToPosition } from './utils/indexToPosition'
 import { isInFunctionExpression } from './utils/isInFunctionExpression'
 import PinceauTokensManager, { PinceauVSCodeSettings, defaultSettings } from './PinceauTokensManager'
 import { getCurrentLine } from './utils/getCurrentLine'
 import { isInString } from './utils/isInString'
 import { getHoveredToken, getHoveredTokenFunction } from './utils/getHoveredToken'
 import { findStringRange } from './utils/findStringRange'
+import { indexToPosition } from './utils/indexToPosition'
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -35,6 +35,7 @@ const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument)
 
 let hasConfigurationCapability = false
 let hasWorkspaceFolderCapability = false
+let debug = false
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let hasDiagnosticRelatedInformationCapability = false
 let rootPath: string
@@ -42,21 +43,15 @@ let rootPath: string
 const pinceauTokensManager = new PinceauTokensManager()
 
 connection.onInitialize((params: InitializeParams) => {
+  console.log('🖌️ Booting Pinceau extension...')
+
   const capabilities = params.capabilities
 
   // Does the client support the `workspace/configuration` request?
   // If not, we fall back using global settings.
-  hasConfigurationCapability = !!(
-    capabilities.workspace && !!capabilities.workspace.configuration
-  )
-  hasWorkspaceFolderCapability = !!(
-    capabilities.workspace && !!capabilities.workspace.workspaceFolders
-  )
-  hasDiagnosticRelatedInformationCapability = !!(
-    capabilities.textDocument &&
-    capabilities.textDocument.publishDiagnostics &&
-    capabilities.textDocument.publishDiagnostics.relatedInformation
-  )
+  hasConfigurationCapability = !!(capabilities.workspace && !!capabilities.workspace.configuration)
+  hasWorkspaceFolderCapability = !!(capabilities.workspace && !!capabilities.workspace.workspaceFolders)
+  hasDiagnosticRelatedInformationCapability = !!(capabilities.textDocument && capabilities.textDocument.publishDiagnostics && capabilities.textDocument.publishDiagnostics.relatedInformation)
 
   connection.onInitialized(async () => {
     if (hasConfigurationCapability) {
@@ -80,9 +75,11 @@ connection.onInitialize((params: InitializeParams) => {
     rootPath = validFolders?.[0]
 
     const settings = await getDocumentSettings()
+    debug = settings?.debug || false
 
-    // parse and sync variables
     pinceauTokensManager.syncTokens(validFolders || [], settings)
+
+    console.log('🖌️ Booted Pinceau extension!')
   })
 
   const result: InitializeResult = {
@@ -105,6 +102,7 @@ connection.onInitialize((params: InitializeParams) => {
       }
     }
   }
+
   return result
 })
 
@@ -114,6 +112,8 @@ let globalSettings = defaultSettings
 const documentSettings: Map<string, Thenable<PinceauVSCodeSettings>> = new Map()
 
 connection.onDidChangeConfiguration(async (change) => {
+  debug && console.log('🖌️ onDidChangeConfiguration')
+
   if (hasConfigurationCapability) {
     // Reset all cached document settings
     documentSettings.clear()
@@ -129,7 +129,6 @@ connection.onDidChangeConfiguration(async (change) => {
 
     const settings = await getDocumentSettings()
 
-    // parse and sync variables
     pinceauTokensManager.syncTokens(validFolders || [], settings)
   } else {
     globalSettings = <PinceauVSCodeSettings>(
@@ -139,6 +138,7 @@ connection.onDidChangeConfiguration(async (change) => {
 })
 
 function getDocumentSettings (): Thenable<PinceauVSCodeSettings> {
+  debug && console.log('🖌️ getDocumentSettings')
   const resource = 'all'
   if (!hasConfigurationCapability) {
     return Promise.resolve(globalSettings)
@@ -158,22 +158,26 @@ connection.onDidChangeWatchedFiles(async (_change) => {
   const settings = await getDocumentSettings()
 
   // update cached variables
-  _change.changes.forEach((change) => {
-    const filePath = uriToPath(change.uri)
-    if (filePath) {
-      // remove variables from cache
-      if (change.type === FileChangeType.Deleted) {
-        pinceauTokensManager.clearFileCache(filePath)
-      } else {
-        pinceauTokensManager.syncTokens([filePath], settings)
+  return _change.changes.forEach(
+    (change) => {
+      const filePath = uriToPath(change.uri)
+      debug && console.log('🖌️ fileChange', filePath)
+      if (filePath) {
+        // remove variables from cache
+        if (change.type === FileChangeType.Deleted) {
+          return pinceauTokensManager.clearFileCache(filePath)
+        } else {
+          return pinceauTokensManager.syncTokens([dirname(filePath)], settings)
+        }
       }
     }
-  })
+  )
 })
 
 // This handler provides the initial list of the completion items.
 connection.onCompletion(
   (_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
+    debug && console.log('🖌️ onCompletion')
     const doc = documents.get(_textDocumentPosition.textDocument.uri)
     if (!doc) { return [] }
     const items: CompletionItem[] = []
@@ -183,13 +187,16 @@ connection.onCompletion(
 
     const position = doc.positionAt(offset)
     const currentLine = getCurrentLine(doc, position)
-    const isBetween = (x: number, a: number, b: number) => (x >= a && x <= b)
 
     // Resolve Vue <style> contexts
     const styleTsBlocks: [number, number][] = []
     if (ext === 'vue') {
-      const parsedVueComponent = parseSfc(doc.getText())
-      parsedVueComponent.descriptor.styles.forEach(styleTag => styleTsBlocks.push([styleTag.loc.start.offset, styleTag.loc.end.offset]))
+      try {
+        const parsedVueComponent = parseSfc(doc.getText())
+        parsedVueComponent.descriptor.styles.forEach(styleTag => styleTsBlocks.push([styleTag.loc.start.offset, styleTag.loc.end.offset]))
+      } catch (e) {
+        // console.log({ e })
+      }
     }
 
     const isTokenFunctionCall = currentLine ? isInFunctionExpression(currentLine.text, position) : false
@@ -200,6 +207,9 @@ connection.onCompletion(
     const stringifiedValue = token => isResponsiveToken(token)
       ? Object.entries(token.value).map(([key, value]) => `@${key}: ${value}`).join('\n')
       : token.value?.toString() || token?.value
+
+    // Debug output
+    debug && console.log({ completion: { ext, offset, position, currentLine, isTokenFunctionCall, isOffsetOnStyleTsTag, isInStringExpression } })
 
     // Create completion symbols
     if (isTokenFunctionCall || (isOffsetOnStyleTsTag && isInStringExpression)) {
@@ -234,17 +244,21 @@ connection.onCompletion(
 )
 
 // This handler resolves additional information for the item selected in the completion list.
-connection.onCompletionResolve((item: CompletionItem): CompletionItem => item)
+connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
+  debug && console.log('🖌️ onCompletionResolve')
+  return item
+})
 
 connection.onDocumentColor(async (params): Promise<ColorInformation[]> => {
-  const document = documents.get(params.textDocument.uri)
-  if (!document) {
-    return []
-  }
+  debug && console.log('🖌️ onDocumentColor')
+
+  const doc = documents.get(params.textDocument.uri)
+  if (!doc) { return [] }
 
   const colors: ColorInformation[] = []
 
-  const text = document.getText()
+  // const ext = path.extname(doc.uri).slice(1)
+  const text = doc.getText()
   const referencesRegex = /{([a-zA-Z0-9.]+)}/g
   const dtRegex = /\$dt\(['|`|"]([a-zA-Z0-9.]+)['|`|"](?:,\s*(['|`|"]([a-zA-Z0-9.]+)['|`|"]))?\)?/g
   const dtMatches = findAll(dtRegex, text)
@@ -255,11 +269,11 @@ connection.onDocumentColor(async (params): Promise<ColorInformation[]> => {
   for (const match of [...dtMatches, ...tokenMatches]) {
     const isDt = match[0].startsWith('$dt')
     const start = indexToPosition(text, isDt ? match.index : match.index + 1)
-    const end = indexToPosition(text, isDt ? match.index + match.length : match.index + match[1].length + 1)
+    const end = indexToPosition(text, match.index + match[1].length)
 
     const token = pinceauTokensManager.getAll().get(match[1])
 
-    if (pinceauTokensManager.initialized && !token && text.charAt(match.index - 1) !== '$') {
+    if (pinceauTokensManager.getInitialized() && !token && text.charAt(match.index - 1) !== '$' && !match[1].includes(' ')) {
       await connection.sendDiagnostics({
         uri: params.textDocument.uri,
         diagnostics: [{
@@ -274,13 +288,11 @@ connection.onDocumentColor(async (params): Promise<ColorInformation[]> => {
       const range = {
         start: {
           line: globalStart.line + start.line,
-          character:
-            (end.line === 0 ? globalStart.character : 0) + start.character
+          character: (end.line === 0 ? globalStart.character : 0) + start.character
         },
         end: {
           line: globalStart.line + end.line,
-          character:
-            (end.line === 0 ? globalStart.character : 0) + end.character
+          character: (end.line === 0 ? globalStart.character : 0) + end.character
         }
       }
 
@@ -295,6 +307,8 @@ connection.onDocumentColor(async (params): Promise<ColorInformation[]> => {
 })
 
 connection.onHover((params) => {
+  debug && console.log('🖌️ onHover')
+
   const doc = documents.get(params.textDocument.uri)
   if (!doc) { return }
 
@@ -305,10 +319,16 @@ connection.onHover((params) => {
 
   const cssVariable = pinceauTokensManager.getAll().get(token.token)
 
-  if (cssVariable) { return { contents: `⚙️ ${(cssVariable.value as any)?.initial || cssVariable.value}` } }
+  debug && console.log({ hover: { token, cssVariable } })
+
+  if (cssVariable) { return { contents: `⚙️ ${(cssVariable.value as any)?.initial || cssVariable.value}`, code: '', message: '', data: {}, name: '' } }
 })
 
 connection.onColorPresentation((params) => {
+  debug && console.log('🖌️ onColorPresentation')
+
+  if (!pinceauTokensManager.getInitialized()) { return }
+
   const document = documents.get(params.textDocument.uri)
   const className = document.getText(params.range)
   if (!className) { return [] }
@@ -316,6 +336,10 @@ connection.onColorPresentation((params) => {
 })
 
 connection.onDefinition((params) => {
+  debug && console.log('🖌️ onDefinition')
+
+  if (!pinceauTokensManager.getInitialized()) { return }
+
   const doc = documents.get(params.textDocument.uri)
   if (!doc) { return null }
   const currentLine = getCurrentLine(doc, params.position)
@@ -341,21 +365,29 @@ connection.onDefinition((params) => {
   if (!token?.definition) { return }
 
   const inlineRange = findStringRange(currentLine.text, currentToken.token, params.position, delimiter)
+
+  // Debug output
+  if (debug) { console.log({ definition: { currentToken, token, inlineRange } }) }
+
   if (token?.definition && inlineRange) {
     return [
       {
         uri: doc.uri,
         targetUri: token.definition.uri,
+        range: {
+          start: { character: inlineRange.start, line: params.position.line },
+          end: { character: inlineRange.end, line: params.position.line }
+        },
         targetRange: {
-          start: { character: params.position.line - currentToken.token.length, line: params.position.line },
-          end: { character: params.position.line + currentToken.token.length, line: params.position.line }
+          start: { character: (token.definition.range.start as any).column, line: token.definition.range.start.line - 1 },
+          end: { character: (token.definition.range.start as any).column, line: token.definition.range.start.line - 1 }
         },
         targetSelectionRange: {
           start: { character: (token.definition.range.start as any).column, line: token.definition.range.start.line - 1 },
           end: { character: (token.definition.range.end as any).column, line: token.definition.range.end.line - 1 }
         },
         originSelectionRange: {
-          start: { line: params.position.line, character: Math.max(0, inlineRange.start) },
+          start: { line: params.position.line, character: inlineRange.start },
           end: { line: params.position.line, character: inlineRange.end }
         }
       }
@@ -366,3 +398,7 @@ connection.onDefinition((params) => {
 documents.listen(connection)
 
 connection.listen()
+
+function isBetween (x: number, a: number, b: number) {
+  return (x >= a && x <= b)
+}

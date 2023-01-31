@@ -10,6 +10,7 @@ import { culoriColorToVscodeColor } from './utils/culoriColorToVscodeColor'
 export interface PinceauVSCodeSettings {
   tokensOutput: string[];
   definitionsOutput: string[];
+  debug: boolean;
 }
 
 export const defaultSettings: PinceauVSCodeSettings = {
@@ -20,7 +21,8 @@ export const defaultSettings: PinceauVSCodeSettings = {
   definitionsOutput: [
     '**/*/.nuxt/pinceau/definitions.ts',
     '**/*/node_modules/.vite/pinceau/definitions.ts'
-  ]
+  ],
+  debug: false
 }
 
 async function globRequire (folderPath: string, globPaths: string[], cb: (filePath: string) => void) {
@@ -46,6 +48,7 @@ export default class PinceauTokensManager {
           folderPath,
           settings?.tokensOutput || defaultSettings.tokensOutput,
           (filePath) => {
+            settings?.debug && console.log('Loaded:', filePath)
             const file = createJITI(folderPath)(filePath)
             this.updateCacheFromTokensContent({ content: file?.default || file, filePath })
           }
@@ -60,6 +63,7 @@ export default class PinceauTokensManager {
           folderPath,
           settings?.definitionsOutput || defaultSettings.definitionsOutput,
           (filePath) => {
+            settings?.debug && console.log('Loaded:', filePath)
             const file = createJITI(folderPath)(filePath)
             this.pushDefinitions({ content: file?.default || file, filePath })
           }
@@ -70,6 +74,8 @@ export default class PinceauTokensManager {
     }
 
     if (!this.initialized) { this.initialized = true }
+
+    settings.debug && console.log('Loaded config!')
   }
 
   public pushDefinitions ({
@@ -129,6 +135,10 @@ export default class PinceauTokensManager {
 
   public clearAllCache () {
     this.cacheManager.clearAllCache()
+  }
+
+  public getInitialized () {
+    return this.initialized
   }
 }
 

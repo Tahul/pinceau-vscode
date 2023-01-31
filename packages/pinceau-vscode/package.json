@@ -54,6 +54,12 @@
 						]
 					}
 				},
+				"pinceau.debug": {
+					"type": "boolean",
+					"markdownDescription": "Toggles debug logging for the extension.",
+					"default": false,
+					"scope": 3
+				},
 				"pinceau.definitionsOutput": {
 					"type": "array",
 					"markdownDescription": "Configure glob patterns for including files and folders. Read more about glob patterns [here](https://code.visualstudio.com/docs/editor/codebasics#_advanced-search-options).",
