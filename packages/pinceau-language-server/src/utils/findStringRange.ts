@@ -1,15 +1,20 @@
 import { Position } from 'vscode-languageserver'
 
-export function findStringRange (text: string, target: string, position: Position, delimiter = '{'): { start: number, end: number } | void {
+export function findStringRange (text: string, target: string, position: Position, delimiter = '{'): { start: number, end: number } {
+  const toRet = {
+    start: -1,
+    end: -1
+  }
+
   if (text.includes(target)) {
     const lastIndex = text.lastIndexOf(delimiter, position.character)
-    const start = text.indexOf(target, lastIndex)
+    const startIndex = text.indexOf(target, lastIndex)
 
-    if (lastIndex === -1 || start === -1) { return }
+    if (lastIndex === -1 || startIndex === -1) { return toRet }
 
-    return {
-      start,
-      end: start + target.length
-    }
+    toRet.start = startIndex
+    toRet.end = startIndex + target.length
   }
+
+  return toRet
 }

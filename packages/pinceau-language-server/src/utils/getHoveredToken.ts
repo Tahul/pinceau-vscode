@@ -2,7 +2,7 @@ import { TextDocument, Position } from 'vscode-languageserver-textdocument'
 import { getCurrentLine } from './getCurrentLine'
 import { dtRegex } from './regexes'
 
-export function getHoveredToken (doc: TextDocument, position: Position): { token: string, range: { start: number, end: number } } | void {
+export function getHoveredToken (doc: TextDocument, position: Position): { token: string, range: { start: number, end: number } } | undefined {
   const line = getCurrentLine(doc, position)
   if (!line) { return }
   const startIndex = line.text.lastIndexOf('{', position.character)
@@ -17,13 +17,14 @@ export function getHoveredToken (doc: TextDocument, position: Position): { token
   }
 }
 
-export function getHoveredTokenFunction (doc: TextDocument, position: Position): { token: string, range: { start: number, end: number } } | void {
+export function getHoveredTokenFunction (doc: TextDocument, position: Position): { token: string, range: { start: number, end: number } } | undefined {
   const line = getCurrentLine(doc, position)
   if (!line) { return }
   const startIndex = line.text.lastIndexOf('$dt(', position.character)
-  const endIndex = line.text.indexOf(')', position.character)
+  let endIndex = line.text.indexOf(')', position.character)
   if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) { return }
-  const matches = dtRegex.exec(line.text.substring(startIndex, endIndex + 1))
+  endIndex = endIndex + 1
+  const matches = dtRegex.exec(line.text.substring(startIndex, endIndex))
   return {
     token: matches?.[1],
     range: {

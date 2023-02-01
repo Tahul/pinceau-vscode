@@ -11,6 +11,7 @@ export interface PinceauVSCodeSettings {
   tokensOutput: string[];
   definitionsOutput: string[];
   debug: boolean;
+  missingTokenHintSeverity: 'warning' | 'error' | 'information' | 'hint'
 }
 
 export const defaultSettings: PinceauVSCodeSettings = {
@@ -22,7 +23,8 @@ export const defaultSettings: PinceauVSCodeSettings = {
     '**/*/.nuxt/pinceau/definitions.ts',
     '**/*/node_modules/.vite/pinceau/definitions.ts'
   ],
-  debug: false
+  debug: false,
+  missingTokenHintSeverity: 'warning'
 }
 
 async function globRequire (folderPath: string, globPaths: string[], cb: (filePath: string) => void) {
@@ -38,9 +40,22 @@ async function globRequire (folderPath: string, globPaths: string[], cb: (filePa
 
 export default class PinceauTokensManager {
   public initialized = false
+  public synchronizing: Promise<void> | false
   private cacheManager = new CacheManager<DesignToken & { definition: Location; color?: Color }>()
 
   public async syncTokens (folders: string[], settings: PinceauVSCodeSettings) {
+    this.synchronizing = this._syncTokens(folders, settings)
+
+    await this.synchronizing
+
+    this.synchronizing = false
+
+    if (!this.initialized) { this.initialized = true }
+
+    settings.debug && console.log('✅ Loaded config!')
+  }
+
+  private async _syncTokens (folders: string[], settings: PinceauVSCodeSettings) {
     for (const folderPath of folders) {
       // index.ts
       try {
@@ -48,13 +63,13 @@ export default class PinceauTokensManager {
           folderPath,
           settings?.tokensOutput || defaultSettings.tokensOutput,
           (filePath) => {
-            settings?.debug && console.log('Loaded:', filePath)
+            settings?.debug && console.log('📥 Loaded:', filePath)
             const file = createJITI(folderPath)(filePath)
             this.updateCacheFromTokensContent({ content: file?.default || file, filePath })
           }
         )
       } catch (e) {
-        console.log('Could not load theme file:', folderPath)
+        console.log('❌ Could not load theme file:', folderPath)
       }
 
       // defintions.ts
@@ -63,19 +78,17 @@ export default class PinceauTokensManager {
           folderPath,
           settings?.definitionsOutput || defaultSettings.definitionsOutput,
           (filePath) => {
-            settings?.debug && console.log('Loaded:', filePath)
+            settings?.debug && console.log('📥 Loaded:', filePath)
             const file = createJITI(folderPath)(filePath)
             this.pushDefinitions({ content: file?.default || file, filePath })
           }
         )
       } catch (e) {
-        console.log('Could not load definitions file:', folderPath)
+        console.log('❌ Could not load definitions file:', folderPath)
       }
     }
 
     if (!this.initialized) { this.initialized = true }
-
-    settings.debug && console.log('Loaded config!')
   }
 
   public pushDefinitions ({
@@ -135,10 +148,6 @@ export default class PinceauTokensManager {
 
   public clearAllCache () {
     this.cacheManager.clearAllCache()
-  }
-
-  public getInitialized () {
-    return this.initialized
   }
 }
 

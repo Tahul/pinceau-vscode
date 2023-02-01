@@ -55,12 +55,13 @@ export function activate (context: vscode.ExtensionContext) {
       scheme: 'file',
       language: event.split(':')[1]
     })),
+    diagnosticCollectionName: 'pinceau',
     synchronize: {
       fileEvents: [
-        vscode.workspace.createFileSystemWatcher('**/*.css'),
-        vscode.workspace.createFileSystemWatcher('**/*.scss'),
-        vscode.workspace.createFileSystemWatcher('**/*.sass'),
-        vscode.workspace.createFileSystemWatcher('**/*.less')
+        vscode.workspace.createFileSystemWatcher('**/*/.nuxt/pinceau/index.ts'),
+        vscode.workspace.createFileSystemWatcher('**/*/node_modules/.vite/pinceau/index.ts'),
+        vscode.workspace.createFileSystemWatcher('**/*/.nuxt/pinceau/definitions.ts'),
+        vscode.workspace.createFileSystemWatcher('**/*/node_modules/.vite/pinceau/definitions.ts')
       ]
     }
   }
@@ -78,8 +79,6 @@ export function activate (context: vscode.ExtensionContext) {
 }
 
 export function deactivate (): Thenable<void> | undefined {
-  if (!client) {
-    return undefined
-  }
+  if (!client) { return undefined }
   return client.stop()
 }
