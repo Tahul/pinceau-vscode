@@ -16,12 +16,12 @@ export interface PinceauVSCodeSettings {
 
 export const defaultSettings: PinceauVSCodeSettings = {
   tokensOutput: [
-    '**/*/.nuxt/pinceau/index.ts',
-    '**/*/node_modules/.vite/pinceau/index.ts'
+    '**/.nuxt/pinceau/index.ts',
+    '**/node_modules/.vite/pinceau/index.ts'
   ],
   definitionsOutput: [
-    '**/*/.nuxt/pinceau/definitions.ts',
-    '**/*/node_modules/.vite/pinceau/definitions.ts'
+    '**/.nuxt/pinceau/definitions.ts',
+    '**/node_modules/.vite/pinceau/definitions.ts'
   ],
   debug: false,
   missingTokenHintSeverity: 'warning'
@@ -58,6 +58,8 @@ export default class PinceauTokensManager {
 
   private async _syncTokens (folders: string[], settings: PinceauVSCodeSettings) {
     for (const folderPath of folders) {
+      const jiti = createJITI(folderPath, { cache: false, requireCache: false, v8cache: false })
+
       // index.ts
       try {
         await globRequire(
@@ -65,7 +67,7 @@ export default class PinceauTokensManager {
           settings?.tokensOutput || defaultSettings.tokensOutput,
           (filePath) => {
             settings?.debug && console.log('📥 Loaded:', filePath)
-            const file = createJITI(folderPath)(filePath)
+            const file = jiti(filePath)
             this.updateCacheFromTokensContent({ content: file?.default || file, filePath })
           }
         )
@@ -80,7 +82,7 @@ export default class PinceauTokensManager {
           settings?.definitionsOutput || defaultSettings.definitionsOutput,
           (filePath) => {
             settings?.debug && console.log('📥 Loaded:', filePath)
-            const file = createJITI(folderPath)(filePath)
+            const file = jiti(filePath)
             this.pushDefinitions({ content: file?.default || file, filePath })
           }
         )

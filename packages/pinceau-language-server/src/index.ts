@@ -1,4 +1,3 @@
-import { dirname } from 'node:path'
 import {
   createConnection,
   TextDocuments,
@@ -11,7 +10,6 @@ import {
   TextDocumentSyncKind,
   InitializeResult,
   ColorInformation,
-  FileChangeType,
   Diagnostic
 } from 'vscode-languageserver/node'
 import { Position, Range, TextDocument } from 'vscode-languageserver-textdocument'
@@ -74,6 +72,7 @@ connection.onInitialize((params: InitializeParams) => {
     rootPath = validFolders?.[0]
 
     const settings = await getDocumentSettings()
+
     debug = settings?.debug || false
 
     await pinceauTokensManager.syncTokens(validFolders || [], settings)
@@ -131,7 +130,7 @@ connection.onDidChangeConfiguration(async (change) => {
 
     const settings = await getDocumentSettings()
 
-    pinceauTokensManager.syncTokens(validFolders || [], settings)
+    await pinceauTokensManager.syncTokens(validFolders || [], settings)
   } else {
     globalSettings = <PinceauVSCodeSettings>(
       (change.settings?.pinceau || defaultSettings)
@@ -153,23 +152,25 @@ function getDocumentSettings (): Thenable<PinceauVSCodeSettings> {
   return result
 }
 
+// Here I update my local tokens indexes
 connection.onDidChangeWatchedFiles(async (_change) => {
   const settings = await getDocumentSettings()
 
-  // Update cached tokens
-  return _change.changes.forEach(
-    (change) => {
-      const filePath = uriToPath(change.uri)
-      debug && connection.console.log(`⌛ fileChange ${filePath}`)
-      if (filePath) {
-        if (change.type === FileChangeType.Deleted) {
-          return pinceauTokensManager.clearFileCache(filePath)
-        } else {
-          return pinceauTokensManager.syncTokens([dirname(filePath)], settings)
-        }
-      }
-    }
-  )
+  pinceauTokensManager.clearAllCache()
+
+  const validFolders = await connection.workspace
+    .getWorkspaceFolders()
+    .then(folders =>
+      folders
+        ?.map(folder => uriToPath(folder.uri) || '')
+        .filter(path => !!path)
+    )
+
+  await pinceauTokensManager.syncTokens(validFolders || [], settings)
+
+  // Update all opened documents diagnostics
+  const docs = documents.all()
+  docs.forEach(doc => updateDocumentDiagnostics(doc, settings))
 })
 
 // This handler provides the initial list of the completion items.
@@ -348,47 +349,7 @@ connection.onDefinition(async (params) => {
 
 documents.onDidChangeContent(async (params) => {
   const settings = await getDocumentSettings()
-  const diagnostics: Diagnostic[] = []
-  const text = params.document.getText()
-
-  const tokensData = getDocumentTokensData(params.document)
-
-  getDocumentTokens(
-    params.document,
-    tokensData,
-    settings,
-    ({ range, token, tokenPath, match, localToken }) => {
-      if (pinceauTokensManager.initialized && (!token && !localToken) && !tokenPath.includes(' ') && text.charAt(match.index - 1) !== '$') {
-        debug && console.warn(`🎨 Token not found: ${tokenPath}`)
-
-        const settingsSeverity = (['error', 'warning', 'information', 'hint', 'disable'].indexOf(settings.missingTokenHintSeverity) + 1) as 1 | 2 | 3 | 4 | 5
-
-        if (settingsSeverity === 5) { return }
-
-        diagnostics.push({
-          message: `🎨 Token '${tokenPath}' not found.`,
-          range: {
-            start: {
-              character: range.start.character + 1,
-              line: range.start.line
-            },
-            end: {
-              character: range.end.character + 1,
-              line: range.start.line
-            }
-          },
-          severity: settingsSeverity,
-          code: tokenPath
-        })
-      }
-    }
-  )
-
-  connection.sendDiagnostics({
-    uri: params.document.uri,
-    version: params.document.version,
-    diagnostics
-  })
+  updateDocumentDiagnostics(params.document, settings)
 })
 
 // Only keep settings for open documents
@@ -610,4 +571,47 @@ function stringifiedValue (token) {
   return isResponsiveToken(token)
     ? Object.entries(token.value).map(([key, value]) => `@${key}: ${value}`).join('\n')
     : token.value?.toString() || token?.value
+}
+
+function updateDocumentDiagnostics (doc: TextDocument, settings: PinceauVSCodeSettings) {
+  const text = doc.getText()
+  const diagnostics: Diagnostic[] = []
+  const tokensData = getDocumentTokensData(doc)
+
+  getDocumentTokens(
+    doc,
+    tokensData,
+    settings,
+    ({ range, token, tokenPath, match, localToken }) => {
+      if (pinceauTokensManager.initialized && (!token && !localToken) && !tokenPath.includes(' ') && text.charAt(match.index - 1) !== '$') {
+        debug && console.warn(`🎨 Token not found: ${tokenPath}`)
+
+        const settingsSeverity = (['error', 'warning', 'information', 'hint', 'disable'].indexOf(settings.missingTokenHintSeverity) + 1) as 1 | 2 | 3 | 4 | 5
+
+        if (settingsSeverity === 5) { return }
+
+        diagnostics.push({
+          message: `🎨 Token '${tokenPath}' not found.`,
+          range: {
+            start: {
+              character: range.start.character + 1,
+              line: range.start.line
+            },
+            end: {
+              character: range.end.character + 1,
+              line: range.start.line
+            }
+          },
+          severity: settingsSeverity,
+          code: tokenPath
+        })
+      }
+    }
+  )
+
+  connection.sendDiagnostics({
+    uri: doc.uri,
+    version: doc.version,
+    diagnostics
+  })
 }

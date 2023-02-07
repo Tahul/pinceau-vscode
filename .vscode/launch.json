@@ -9,7 +9,7 @@
       "runtimeExecutable": "${execPath}",
       "args": [
         "--extensionDevelopmentPath=${workspaceRoot}/packages/pinceau-vscode",
-        "/Users/yaelguilloux/Code/sandbox/pinceau/"
+        "/Users/yaelguilloux/Code/sandbox/pinceau/playground"
       ],
       "sourceMaps": true,
       "outFiles": ["${workspaceRoot}/packages/pinceau-vscode/dist/**/*.js"],
