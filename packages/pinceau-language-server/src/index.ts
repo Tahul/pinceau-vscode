@@ -1,4 +1,4 @@
-import path, { dirname } from 'node:path'
+import { dirname } from 'node:path'
 import {
   createConnection,
   TextDocuments,
@@ -16,7 +16,10 @@ import {
 } from 'vscode-languageserver/node'
 import { Position, Range, TextDocument } from 'vscode-languageserver-textdocument'
 import { parse as parseSfc } from '@vue/compiler-sfc'
-import { DesignToken } from 'pinceau/index'
+import type { SFCStyleBlock } from '@vue/compiler-sfc'
+import { pathToVarName, printAst, transforms } from 'pinceau/utils'
+import { defu } from 'defu'
+import type { DesignToken } from 'pinceau'
 import { uriToPath } from './utils/protocol'
 import { findAll } from './utils/findAll'
 import { isInFunctionExpression } from './utils/isInFunctionExpression'
@@ -26,6 +29,8 @@ import { isInString } from './utils/isInString'
 import { getHoveredToken, getHoveredTokenFunction } from './utils/getHoveredToken'
 import { findStringRange } from './utils/findStringRange'
 import { indexToPosition } from './utils/indexToPosition'
+
+type DocumentTokensData = { version: number; styles: SFCStyleBlock[]; variants: any; computedStyles: any; localTokens: any }
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -176,12 +181,27 @@ connection.onCompletion(async (_textDocumentPosition: TextDocumentPositionParams
   const doc = documents.get(_textDocumentPosition.textDocument.uri)
   if (!doc) { return [] }
 
-  const { isInStringExpression, isOffsetOnStyleTsTag, isTokenFunctionCall } = getCursorContext(doc, _textDocumentPosition.position)
+  const tokensData = getDocumentTokensData(doc)
+
+  const { isInStringExpression, isOffsetOnStyleTsTag, isTokenFunctionCall } = getCursorContext(doc, _textDocumentPosition.position, tokensData?.styles)
 
   // Create completion symbols
   const items: CompletionItem[] = []
   if (isTokenFunctionCall || ((doc.uri.includes('tokens.config.ts') || isOffsetOnStyleTsTag) && isInStringExpression)) {
-    pinceauTokensManager.getAll().forEach((token) => {
+    Object.entries(tokensData.localTokens).forEach(
+      ([key, localToken]: [string, any]) => {
+        const path = key.replace(/^--/, '').split('-').join('.')
+        const completion: CompletionItem = {
+          label: path,
+          detail: printAst(localToken).code,
+          insertText: `{${path}}`,
+          kind: CompletionItemKind.EnumMember,
+          sortText: 'z' + path
+        }
+        items.push(completion)
+      }
+    )
+    pinceauTokensManager.getAll().forEach((token: any) => {
       if (!token?.name || !token?.value) { return }
 
       const insertText = isTokenFunctionCall ? token?.name : `{${token.name}}`
@@ -198,7 +218,7 @@ connection.onCompletion(async (_textDocumentPosition: TextDocumentPositionParams
         documentation: `${configValue}${sourcePath ? '\n\n' + source : ''}`,
         insertText,
         kind: CompletionItemKind.Color,
-        sortText: token?.name
+        sortText: 'z' + token?.name
       }
 
       items.push(completion)
@@ -226,8 +246,11 @@ connection.onDocumentColor(async (params): Promise<ColorInformation[]> => {
 
   const settings = await getDocumentSettings()
 
+  const tokensData = getDocumentTokensData(doc)
+
   getDocumentTokens(
     doc,
+    tokensData,
     settings,
     ({ range, token }) => {
       if ((token as any)?.color) {
@@ -250,9 +273,13 @@ connection.onHover(async (params) => {
   const doc = documents.get(params.textDocument.uri)
   if (!doc) { return }
 
-  const { token } = getClosestToken(doc, params.position)
+  const tokensData = getDocumentTokensData(doc)
 
-  if (token) { return { contents: `🎨 ${(token.value as any)?.initial || token.value}`, code: '', message: '', data: {}, name: '' } }
+  const { token, localToken } = getClosestToken(doc, params.position, tokensData)
+
+  if (localToken) { return { contents: `📍 \`\`\`\n${printAst(localToken).code}\n\`\`\``, code: '', message: '', data: {}, name: '' } }
+
+  if (token) { return { contents: `🎨 ${stringifiedValue(token)}`, code: '', message: '', data: {}, name: '' } }
 })
 
 connection.onColorPresentation((params) => {
@@ -278,24 +305,37 @@ connection.onDefinition(async (params) => {
   const doc = documents.get(params.textDocument.uri)
   if (!doc) { return null }
 
-  const { token, lineRange } = getClosestToken(doc, params.position)
+  const tokensData = getDocumentTokensData(doc)
 
-  if (token?.definition && lineRange) {
+  const { token, lineRange, localToken } = getClosestToken(doc, params.position, tokensData)
+
+  if ((token?.definition || localToken) && lineRange) {
+    let start: Position
+    let end: Position
+    if (localToken) {
+      start = doc.positionAt(localToken.source.start.offset + localToken.start)
+      end = doc.positionAt(localToken.source.start.offset + localToken.end)
+    }
+    if (token?.definition) {
+      start = { character: (token.definition.range.start as any).column, line: token.definition.range.start.line - 1 }
+      end = { character: (token.definition.range.start as any).column, line: token.definition.range.start.line - 1 }
+    }
+
     return [
       {
         uri: doc.uri,
-        targetUri: token.definition.uri,
+        targetUri: token?.definition?.uri || doc.uri,
         range: {
           start: { character: lineRange.start, line: params.position.line },
           end: { character: lineRange.end, line: params.position.line }
         },
         targetRange: {
-          start: { character: (token.definition.range.start as any).column, line: token.definition.range.start.line - 1 },
-          end: { character: (token.definition.range.start as any).column, line: token.definition.range.start.line - 1 }
+          start,
+          end
         },
         targetSelectionRange: {
-          start: { character: (token.definition.range.start as any).column, line: token.definition.range.start.line - 1 },
-          end: { character: (token.definition.range.end as any).column, line: token.definition.range.end.line - 1 }
+          start,
+          end
         },
         originSelectionRange: {
           start: { line: params.position.line, character: lineRange.start },
@@ -311,11 +351,14 @@ documents.onDidChangeContent(async (params) => {
   const diagnostics: Diagnostic[] = []
   const text = params.document.getText()
 
+  const tokensData = getDocumentTokensData(params.document)
+
   getDocumentTokens(
     params.document,
+    tokensData,
     settings,
-    ({ range, token, tokenPath, match }) => {
-      if (pinceauTokensManager.initialized && !token && !tokenPath.includes(' ') && text.charAt(match.index - 1) !== '$') {
+    ({ range, token, tokenPath, match, localToken }) => {
+      if (pinceauTokensManager.initialized && (!token && !localToken) && !tokenPath.includes(' ') && text.charAt(match.index - 1) !== '$') {
         debug && console.warn(`🎨 Token not found: ${tokenPath}`)
 
         const settingsSeverity = (['error', 'warning', 'information', 'hint', 'disable'].indexOf(settings.missingTokenHintSeverity) + 1) as 1 | 2 | 3 | 4 | 5
@@ -360,8 +403,9 @@ connection.listen()
  */
 function getDocumentTokens (
   doc: TextDocument,
+  tokensData?: DocumentTokensData,
   settings?: PinceauVSCodeSettings,
-  onToken?: (token: { match: RegExpMatchArray, tokenPath: string, token: DesignToken, range: Range, settings: PinceauVSCodeSettings }) => void
+  onToken?: (token: { match: RegExpMatchArray, tokenPath: string, token: DesignToken, range: Range, localToken?: any, settings: PinceauVSCodeSettings }) => void
 ) {
   const colors: ColorInformation[] = []
 
@@ -375,8 +419,11 @@ function getDocumentTokens (
 
   for (const match of [...dtMatches, ...tokenMatches]) {
     const tokenPath = match[1]
+    const varName = pathToVarName(tokenPath)
     const start = indexToPosition(text, match.index)
     const end = indexToPosition(text, match.index + tokenPath.length)
+
+    const localToken = tokensData?.localTokens?.[varName]
 
     const token = pinceauTokensManager.getAll().get(tokenPath)
 
@@ -395,6 +442,7 @@ function getDocumentTokens (
       match,
       tokenPath,
       token,
+      localToken,
       range,
       settings
     })
@@ -408,19 +456,21 @@ function getDocumentTokens (
  *
  * Useful for hover/definition.
  */
-function getClosestToken (doc: TextDocument, position: Position) {
+function getClosestToken (doc: TextDocument, position: Position, tokensData?: DocumentTokensData) {
   const toRet: {
     delimiter: string
     currentLine?: { text: string, range: { start: number; end: number; } }
     currentToken?: { token: string, range: { start: number; end: number; } }
     closestToken?: any
     token?: any
+    localToken?: any
     lineRange?: { start: number, end: number }
   } = {
     delimiter: '{',
     currentToken: undefined,
     currentLine: undefined,
     closestToken: undefined,
+    localToken: undefined,
     token: undefined,
     lineRange: undefined
   }
@@ -440,10 +490,13 @@ function getClosestToken (doc: TextDocument, position: Position) {
   // No syntax found
   if (!toRet.currentToken) { return toRet }
 
+  // Get from local component tokens
+  toRet.localToken = tokensData?.localTokens?.[pathToVarName(toRet.currentToken.token)]
+
   toRet.token = pinceauTokensManager.getAll().get(toRet.currentToken.token)
 
   // Try to resolve from parent token
-  if (!toRet?.token?.definitions) {
+  if (!toRet.localToken && !toRet?.token?.definitions) {
     let currentTokenPath = toRet.currentToken.token.split('.')
     while (currentTokenPath.length) {
       toRet.currentToken.token = currentTokenPath.join('.')
@@ -463,38 +516,92 @@ function getClosestToken (doc: TextDocument, position: Position) {
  *
  * Useful for completions
  */
-function getCursorContext (doc: TextDocument, position: Position) {
-  const ext = path.extname(doc.uri).slice(1)
+function getCursorContext (doc: TextDocument, position: Position, styles: SFCStyleBlock[] = []) {
   const offset = doc.offsetAt(position)
   const currentLine = getCurrentLine(doc, position)
 
-  // Resolve Vue <style> contexts
-  const styleTsBlocks: [number, number][] = []
-  if (ext === 'vue') {
-    try {
-      const parsedVueComponent = parseSfc(doc.getText())
-      parsedVueComponent.descriptor.styles.forEach(styleTag => styleTsBlocks.push([styleTag.loc.start.offset, styleTag.loc.end.offset]))
-    } catch (e) {}
-  }
-
   const isTokenFunctionCall = currentLine ? isInFunctionExpression(currentLine.text, position) : false
-  const isOffsetOnStyleTsTag = styleTsBlocks.some(([start, end]) => (offset >= start && offset <= end))
+  const currentStyleTag = styles.find(styleBlock => (offset >= styleBlock.loc.start.offset && offset <= styleBlock.loc.end.offset))
   const isInStringExpression = currentLine ? isInString(currentLine.text, position) : false
 
   return {
     position,
     currentLine,
-    styleTsBlocks,
     isTokenFunctionCall,
-    isOffsetOnStyleTsTag,
+    isOffsetOnStyleTsTag: !!currentStyleTag,
     isInStringExpression
   }
+}
+
+function getParsedVueComponent (uri: string, version: number, code: string): { version: number, styles: SFCStyleBlock[] } {
+  try {
+    const transformCache = pinceauTokensManager.getTransformCache()
+    const cachedTransform = transformCache.get('sfc', uri)
+    if (cachedTransform?.version === version) {
+      return cachedTransform
+    } else {
+      const parsed = parseSfc(code)
+      const data = { version, styles: parsed?.descriptor?.styles.filter(styleTag => styleTag.lang === 'ts') || [] }
+      pinceauTokensManager.getTransformCache().set(uri, 'sfc', data)
+      return data
+    }
+  } catch (e) {
+    return {
+      version,
+      styles: []
+    }
+  }
+}
+
+function getStyleData (uri: string, version: number, index: number, styleBlock: SFCStyleBlock) {
+  let transformData = {
+    version,
+    start: styleBlock.loc.start,
+    end: styleBlock.loc.end,
+    variants: {},
+    computedStyles: {},
+    localTokens: {}
+  }
+  try {
+    const transformCache = pinceauTokensManager.getTransformCache()
+    const cachedTransform = transformCache.get(`css${index}`, uri)
+    if (cachedTransform?.version === version) {
+      transformData = cachedTransform
+    } else {
+      transforms.transformCssFunction('---', styleBlock.content, transformData.variants, transformData.computedStyles, transformData.localTokens, { $tokens: () => undefined, utils: {} })
+      // Tag localTokens with <style> source
+      transformData.localTokens = Object.entries(transformData.localTokens as any).reduce((acc, [key, value]: [string, any]) => ({
+        ...acc,
+        [key]: {
+          ...value,
+          source: {
+            start: styleBlock.loc.start,
+            end: styleBlock.loc.end
+          }
+        }
+      }), {})
+      pinceauTokensManager.getTransformCache().set(uri, `css${index}`, transformData)
+    }
+  } catch (e) {
+    // Mitigate
+  }
+
+  return transformData
+}
+
+function getDocumentTokensData (doc: TextDocument): DocumentTokensData {
+  const parsedData = getParsedVueComponent(doc.uri, doc.version, doc.getText())
+  const mergedData = (parsedData?.styles || []).reduce(
+    (acc, styleTag, index) => defu(getStyleData(doc.uri, doc.version, index, styleTag), acc),
+    {}
+  )
+  return { ...parsedData, ...mergedData } as DocumentTokensData
 }
 
 /**
  * Check if a token is responsive expression or not
  */
-function isResponsiveToken (token) { return !!((token?.value as any)?.initial) }
+function isResponsiveToken (token) { return !!((token?.value as any || token)?.initial) }
 
 /**
  * Return stringified value of a token (to display in hints).

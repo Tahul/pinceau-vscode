@@ -1,37 +1,37 @@
 export default class CacheManager<T> {
-  private cachedVariables: Map<string, Map<string, T>> = new Map()
-  private allVariables: Map<string, T> = new Map()
+  private cache: Map<string, Map<string, T>> = new Map()
+  private allCache: Map<string, T> = new Map()
 
   public get (key: string, filePath?: string) {
     if (filePath) {
-      return this.cachedVariables[filePath]?.get(key)
+      return this.cache[filePath]?.get(key)
     }
 
-    return this.allVariables?.get(key)
+    return this.allCache?.get(key)
   }
 
   public getAll () {
-    return this.allVariables
+    return this.allCache
   }
 
-  public set (filePath: string, key: string, value: T) {
-    if (!this.cachedVariables[filePath]) {
-      this.cachedVariables[filePath] = new Map()
+  public set (path: string, key: string, value: T) {
+    if (!this.cache[path]) {
+      this.cache[path] = new Map()
     }
 
-    this.allVariables?.set(key, value)
-    this.cachedVariables[filePath].set(key, value)
+    this.allCache?.set(key, value)
+    this.cache[path].set(key, value)
   }
 
-  public clearFileCache (filePath: string) {
-    this.cachedVariables[filePath]?.forEach((_, key) => {
-      this.allVariables?.delete(key)
+  public clearFileCache (path: string) {
+    this.cache[path]?.forEach((_, key) => {
+      this.allCache?.delete(key)
     })
-    this.cachedVariables[filePath]?.clear()
+    this.cache[path]?.clear()
   }
 
   public clearAllCache () {
-    this.allVariables?.clear()
-    this.cachedVariables.clear()
+    this.allCache?.clear()
+    this.cache.clear()
   }
 }

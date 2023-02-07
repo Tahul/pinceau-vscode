@@ -16,5 +16,8 @@
 	},
 	"devDependencies": {
 		"turbo": "^1.7.0"
+	},
+	"dependencies": {
+		"vue": "^3.2.47"
 	}
 }

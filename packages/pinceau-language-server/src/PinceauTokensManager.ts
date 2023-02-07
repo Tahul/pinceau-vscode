@@ -41,7 +41,8 @@ async function globRequire (folderPath: string, globPaths: string[], cb: (filePa
 export default class PinceauTokensManager {
   public initialized = false
   public synchronizing: Promise<void> | false
-  private cacheManager = new CacheManager<DesignToken & { definition: Location; color?: Color }>()
+  private tokensCache = new CacheManager<DesignToken & { definition: Location; color?: Color }>()
+  private transformCache = new CacheManager<{ version: number; variants: any; computedStyles: any; localTokens: any; }>()
 
   public async syncTokens (folders: string[], settings: PinceauVSCodeSettings) {
     this.synchronizing = this._syncTokens(folders, settings)
@@ -88,6 +89,9 @@ export default class PinceauTokensManager {
       }
     }
 
+    // Clear transform cache
+    this.transformCache.clearAllCache()
+
     if (!this.initialized) { this.initialized = true }
   }
 
@@ -103,8 +107,8 @@ export default class PinceauTokensManager {
       .entries(content.definitions)
       .forEach(
         ([key, definition]) => {
-          const tokenValue = this.cacheManager.get(key, indexFileName)
-          this.cacheManager.set(
+          const tokenValue = this.tokensCache.get(key, indexFileName)
+          this.tokensCache.set(
             indexFileName,
             key,
             {
@@ -133,21 +137,25 @@ export default class PinceauTokensManager {
           const culoriColor = culori.parse(value)
           if (culoriColor) { token.color = culoriColorToVscodeColor(culoriColor) }
         }
-        this.cacheManager.set(filePath, name, { ...token, name })
+        this.tokensCache.set(filePath, name, { ...token, name })
       }
     )
   }
 
   public getAll () {
-    return this.cacheManager.getAll()
+    return this.tokensCache.getAll()
   }
 
   public clearFileCache (filePath: string) {
-    this.cacheManager.clearFileCache(filePath)
+    this.tokensCache.clearFileCache(filePath)
   }
 
   public clearAllCache () {
-    this.cacheManager.clearAllCache()
+    this.tokensCache.clearAllCache()
+  }
+
+  public getTransformCache (): CacheManager<any> {
+    return this.transformCache
   }
 }
 
