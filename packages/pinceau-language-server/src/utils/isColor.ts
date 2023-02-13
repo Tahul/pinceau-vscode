@@ -3,6 +3,7 @@
 
 // every string I match against are lowercase
 const HEX_PATTERN = /^#(?:[a-f0-9]{3})?(?:[a-f0-9]{3})$/
+
 // css color names + initial + inherit + currentColor + transparent
 const CSS_COLOR_NAMES = [
   'aliceblue',

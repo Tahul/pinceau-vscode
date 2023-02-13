@@ -2,11 +2,12 @@ import { URI } from 'vscode-uri'
 
 const RE_PATHSEP_WINDOWS = /\\/g
 
+/**
+ * Returns an fs path the uri of a TextDocument.
+ */
 export function uriToPath (stringUri: string): string | undefined {
   const uri = URI.parse(stringUri)
-  if (uri.scheme !== 'file') {
-    return undefined
-  }
+  if (uri.scheme !== 'file') { return undefined }
   return normalizeFsPath(uri.fsPath)
 }
 

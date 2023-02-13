@@ -34,8 +34,8 @@
 					"type": "array",
 					"markdownDescription": "Configure glob patterns for including files and folders. Read more about glob patterns [here](https://code.visualstudio.com/docs/editor/codebasics#_advanced-search-options).",
 					"default": [
-						"**/*/.nuxt/pinceau/index.ts",
-    				"**/*/node_modules/.vite/pinceau/index.ts"
+						"**/.nuxt/pinceau/index.ts",
+        		"**/node_modules/.vite/pinceau/index.ts"
 					],
 					"scope": 3,
 					"additionalProperties": {
@@ -58,8 +58,8 @@
 					"type": "array",
 					"markdownDescription": "Configure glob patterns for including files and folders. Read more about glob patterns [here](https://code.visualstudio.com/docs/editor/codebasics#_advanced-search-options).",
 					"default": [
-						"**/*/.nuxt/pinceau/definitions.ts",
-    				"**/*/node_modules/.vite/pinceau/definitions.ts"
+						"**/.nuxt/pinceau/definitions.ts",
+        		"**/node_modules/.vite/pinceau/definitions.ts"
 					],
 					"scope": 3,
 					"additionalProperties": {
@@ -150,7 +150,7 @@
 		"clean": "rm -rf dist && rm -rf out && rm -rf .vscode-test",
 		"lint": "eslint ./src --ext .ts,.tsx --fix",
 		"pretest": "tsc -p ./ && rm -f .vscode-test/user-",
-		"test": "node ./out/test/runTest.js",
+		"test": "node ./src/tests/runTest.ts",
 		"deploy": "vsce publish --no-dependencies",
 		"package": "vsce package --pre-release --no-dependencies"
 	},

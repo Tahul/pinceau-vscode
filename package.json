@@ -15,7 +15,7 @@
 		"deploy": "turbo run deploy"
 	},
 	"devDependencies": {
-		"turbo": "^1.7.0"
+		"turbo": "^1.7.4"
 	},
 	"dependencies": {
 		"vue": "^3.2.47"
